@@ -43,36 +43,39 @@ public class BufferPool {
 			this.transactiontopage = new ConcurrentHashMap<TransactionId,ArrayList<PageId>>();
 			this.waitinggraph = new ConcurrentHashMap<TransactionId, ArrayList<TransactionId>>();
 		}
-		private boolean dfs(TransactionId vertex) {
-			HashSet<TransactionId> visited = new HashSet<TransactionId>();
-			Queue<TransactionId> queue = new LinkedList<TransactionId>();
-			queue.add(vertex);
-			while(!queue.isEmpty()) {
-				TransactionId v = queue.poll();
-				if (visited.contains(v)) return false;
-				visited.add(v);
-				for (TransactionId t : this.waitinggraph.keySet()) {
-					if (t == v) {
-						ArrayList<TransactionId> neighs = this.waitinggraph.get(t);
-						for (TransactionId neigh : neighs) {
-							if(!queue.contains(neigh)) queue.add(neigh);
-						}
-					}
-				}
-			}
+		
+		private String printgraph() {
+			return this.waitinggraph.toString();
+		}
+		
+		private boolean dfs(TransactionId vertex, ConcurrentHashMap<TransactionId, Boolean> visited, ConcurrentHashMap<TransactionId, Boolean> stack) {
+			if(visited.get(vertex))return true;
+			if(stack.get(vertex)) return false;
 			
-			return true;
+			visited.put(vertex, true);
+			stack.put(vertex, true);
+			ArrayList<TransactionId> children = this.waitinggraph.get(vertex);
+			for(TransactionId child : children) {
+				if (this.dfs(child, visited, stack)) return true;
+			}
+			stack.put(vertex, false);
+			
+			return false;
 		}
 		
 		private boolean checkCycles() {
-			ConcurrentHashMap<TransactionId, Boolean> vertices = new ConcurrentHashMap<TransactionId, Boolean>();
+			ConcurrentHashMap<TransactionId, Boolean> visited = new ConcurrentHashMap<TransactionId, Boolean>();
 			for (TransactionId t: this.waitinggraph.keySet()) {
-				vertices.put(t, false);
-				for(TransactionId vertex : this.waitinggraph.get(t)) vertices.put(vertex, false);
+				visited.put(t, false);
+				for(TransactionId vertex : this.waitinggraph.get(t)) visited.put(vertex, false);
 			}
+			ConcurrentHashMap<TransactionId,Boolean> stack = new ConcurrentHashMap<TransactionId,Boolean>();
+			stack.putAll(visited);
+			System.err.println("vertices are");
+			System.err.println(visited.toString());
 			
-			for (TransactionId vertex : vertices.keySet()) {
-				if (this.dfs(vertex)) return true;
+			for (TransactionId vertex : visited.keySet()) {
+				if (this.dfs(vertex, visited,stack)) return true;
 			}
 			
 			return false;
@@ -90,6 +93,7 @@ public class BufferPool {
 				}
 			}
 			this.waitinggraph.put(tid, waiting);
+			System.err.println(this.waitinggraph.toString());
 			
 			if(this.checkCycles()) {
 				throw new TransactionAbortedException();
@@ -248,6 +252,7 @@ public class BufferPool {
             		try {
             			had_to_wait= true;
             			this.lockManager.insertGraph(tid,pid, perm);
+            			System.err.println(this.lockManager.printgraph());
 						this.wait();
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
@@ -259,9 +264,13 @@ public class BufferPool {
             }
             else if (perm == Permissions.READ_WRITE) {
             	while(!this.lockManager.getExclusive(tid,pid)) {
+            		System.err.println(tid);
+            		System.err.println(pid);
             		try {
             			had_to_wait = true;
             			this.lockManager.insertGraph(tid, pid, perm);
+            			System.err.println(tid);
+            			System.err.println(this.lockManager.printgraph());
 						this.wait();
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
