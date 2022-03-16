@@ -13,6 +13,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.ArrayDeque;
 
 enum LockLevel{
 	SHARED,
@@ -44,33 +45,84 @@ public class BufferPool {
 			this.waitinggraph = new ConcurrentHashMap<TransactionId, ArrayList<TransactionId>>();
 		}
 		private boolean dfs(TransactionId vertex) {
+			//return true;
+
+			Deque<Object> ancestorStack = new ArrayDeque<Object>();
+			Deque<Object> todoStack = new ArrayDeque<Object>();
+
+			todoStack.push(vertex);
+
+			while(!todoStack.isEmpty()) {
+				Object poll = todoStack.poll(); // pop next thing todo
+				if (poll instanceof Integer) {
+					ancestorStack.pop(); // we've finished children of last ancestorStack entry;
+				}
+				else {
+					TransactionId v = (TransactionId) poll;
+					if (ancestorStack.contains(v)) return true;
+
+					ancestorStack.push(v); // add it to ancestors, time to check its children
+
+					// check its children next
+					for (TransactionId t : this.waitinggraph.keySet()) {
+						if (t == v) {
+							ArrayList<TransactionId> neighs = this.waitinggraph.get(t);
+							for (TransactionId neigh : neighs) {
+								todoStack.push(neigh);
+							}
+						}
+					}
+					todoStack.push(0);
+				}
+
+				// when finished w all children of v, pop it from ancestors
+			}
+
+
+			/*
 			HashSet<TransactionId> visited = new HashSet<TransactionId>();
-			Queue<TransactionId> queue = new LinkedList<TransactionId>();
-			queue.add(vertex);
-			while(!queue.isEmpty()) {
-				TransactionId v = queue.poll();
-				if (visited.contains(v)) return false;
+			Deque<TransactionId> stack = new ArrayDeque<TransactionId>();
+			stack.add(vertex);
+
+
+
+			//int counter=0; //ADDED
+			while(!stack.isEmpty() /*|| counter > 2 ADDED ) {
+				System.out.println("----> stack: " + stack.toString());
+				TransactionId v = stack.poll();
+				ancestorStack.push(v);
+				if (visited.contains(v)) return true;
 				visited.add(v);
+
+				//int counter=0; //ADDED
+
 				for (TransactionId t : this.waitinggraph.keySet()) {
 					if (t == v) {
 						ArrayList<TransactionId> neighs = this.waitinggraph.get(t);
 						for (TransactionId neigh : neighs) {
-							if(!queue.contains(neigh)) queue.add(neigh);
+							if(!stack.contains(neigh)) stack.push(neigh);
 						}
 					}
 				}
-			}
+
+				//
+
+				//counter++; //ADDED
+			}*/
 			
-			return true;
+			return false;
 		}
 		
 		private boolean checkCycles() {
+			System.out.println("checking cycles!");
 			ConcurrentHashMap<TransactionId, Boolean> vertices = new ConcurrentHashMap<TransactionId, Boolean>();
 			for (TransactionId t: this.waitinggraph.keySet()) {
+				System.out.println("cool");
 				vertices.put(t, false);
 				for(TransactionId vertex : this.waitinggraph.get(t)) vertices.put(vertex, false);
 			}
-			
+
+
 			for (TransactionId vertex : vertices.keySet()) {
 				if (this.dfs(vertex)) return true;
 			}
@@ -79,6 +131,8 @@ public class BufferPool {
 		}
 		
 		private void insertGraph(TransactionId tid, PageId pid, Permissions perm) throws TransactionAbortedException {
+			System.out.println("INSERTING GRAPH!");
+
 			ArrayList<TransactionId> waiting = new ArrayList<TransactionId>();
 			if (perm == Permissions.READ_ONLY) {
 				waiting.add(this.pagetoexclusive.get(pid));
@@ -90,7 +144,8 @@ public class BufferPool {
 				}
 			}
 			this.waitinggraph.put(tid, waiting);
-			
+
+			System.out.println("WOULD CHECK CYCLES");
 			if(this.checkCycles()) {
 				throw new TransactionAbortedException();
 			}
@@ -159,8 +214,7 @@ public class BufferPool {
 			}
 			ArrayList<PageId> pages = this.transactiontopage.getOrDefault(tid,null);
 			if ((pages != null) && pages.contains(pid)) pages.remove(pages.indexOf(pid));
-			
-			
+
 			return;
 		}
 		
@@ -172,11 +226,10 @@ public class BufferPool {
 			return false;
 		}
 		
-		private ArrayList<PageId> getPages(TransactionId tid){
+		private ArrayList<PageId> getPages(TransactionId tid) {
 			return this.transactiontopage.getOrDefault(tid, null);
 		}
-		
-		
+
 	}
 	
 	private LockManager lockManager;
@@ -252,9 +305,9 @@ public class BufferPool {
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
-					} catch (TransactionAbortedException e) {
+					} /*catch (TransactionAbortedException e) {
 						throw e;
-					}
+					}*/
             	}
             }
             else if (perm == Permissions.READ_WRITE) {
@@ -266,9 +319,9 @@ public class BufferPool {
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
-					} catch (TransactionAbortedException e) {
+					} /*catch (TransactionAbortedException e) {
 						throw e;
-					}
+					}*/
             	}
             }
         	if (had_to_wait) this.lockManager.deleteGraph(tid, pid);

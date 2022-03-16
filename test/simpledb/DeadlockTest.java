@@ -32,7 +32,9 @@ public class DeadlockTest extends TestUtil.CreateHeapFile {
    * Set up initial resources for each unit test.
    */
   @Before public void setUp() throws Exception {
+    System.out.println("->>>>>>>>>>>>>>>>> SETUP HAPPENING!");
     super.setUp();
+    System.out.println("->>>>>>>>>>>>>>>>> SETUP HAPPENING!");
 
     // clear all state from the buffer pool
     bp = Database.resetBufferPool(BufferPool.DEFAULT_PAGES);
@@ -178,6 +180,7 @@ public class DeadlockTest extends TestUtil.CreateHeapFile {
    */
   @Test public void testUpgradeWriteDeadlock() throws Exception {
     System.out.println("testUpgradeWriteDeadlock constructing deadlock:");
+    System.out.println("->>>>>>>>>>>>>>>>> START OF DEADLOCK TEST 4REAL!");
 
     LockGrabber lg1Read = startGrabber(tid1, p0, Permissions.READ_ONLY);
     LockGrabber lg2Read = startGrabber(tid2, p0, Permissions.READ_ONLY);
@@ -188,12 +191,13 @@ public class DeadlockTest extends TestUtil.CreateHeapFile {
     LockGrabber lg1Write = startGrabber(tid1, p0, Permissions.READ_WRITE);
     LockGrabber lg2Write = startGrabber(tid2, p0, Permissions.READ_WRITE);
 
+    //int counter = 0; // ADDED
     while (true) {
       Thread.sleep(POLL_INTERVAL);
 
       assertFalse(lg1Write.acquired() && lg2Write.acquired());
-      if (lg1Write.acquired() && !lg2Write.acquired()) break;
-      if (!lg1Write.acquired() && lg2Write.acquired()) break;
+      if (lg1Write.acquired() && !lg2Write.acquired() /*|| counter > 2*/) break;
+      if (!lg1Write.acquired() && lg2Write.acquired() /*|| counter > 2*/) break;
 
       if (lg1Write.getError() != null) {
         lg1Read.stop(); lg1Write.stop();
@@ -214,6 +218,7 @@ public class DeadlockTest extends TestUtil.CreateHeapFile {
         lg2Read = startGrabber(tid2, p0, Permissions.READ_ONLY);
         lg2Write = startGrabber(tid2, p0, Permissions.READ_WRITE);
       }
+      //counter++; // ADDED
     }
 
     System.out.println("testUpgradeWriteDeadlock resolved deadlock");
